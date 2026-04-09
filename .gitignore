@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+publish/
+publicado/
+publicado-pasta/
+*.exe
+*.dll
+*.pdb
+*.cache
+*.deps.json
+*.runtimeconfig.json
