@@ -4,5 +4,5 @@ namespace PdfParaExcelApp.Services;
 
 public interface IColumnDetectorService
 {
-    IReadOnlyList<ColumnDefinition> DetectColumns(RawPdfLine headerLine);
+    IReadOnlyList<ColumnDefinition> DetectColumns(IReadOnlyList<RawPdfLine> headerLines, Action<string>? debugLog = null);
 }

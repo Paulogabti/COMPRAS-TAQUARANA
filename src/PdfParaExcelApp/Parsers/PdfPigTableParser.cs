@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using PdfParaExcelApp.Helpers;
 using PdfParaExcelApp.Models;
@@ -8,94 +9,136 @@ namespace PdfParaExcelApp.Parsers;
 
 public class PdfPigTableParser(IColumnDetectorService columnDetector, IHeaderNormalizerService normalizer) : IPdfTableParser
 {
-    private static readonly string[] HeaderKeywords = ["CODIGO", "DESCRICAO", "UNID", "QTD", "VALOR"];
-    private static readonly string[] StopTokens = ["TOTAL GERAL", "TOTAL:", "EMISSAO", "PAGINA", "RELATORIO", "PREFEITURA"];
+    private static readonly string[] EssentialColumns = ["CODIGO", "DESCRICAO_ITEM", "UNIDADE", "QTD_SALDO"];
+
+    private static readonly string[] StopTokens =
+    [
+        "PREFEITURA MUNICIPAL", "RELATORIO", "EXERCICIO", "MODALIDADE", "LICITACAO", "FORNECEDOR",
+        "SITUACAO QUANTO AO SALDO", "TOTAL GERAL", "TOTAL:", "EMISSAO", "PAGINA"
+    ];
 
     public ParsedTableModel Parse(string pdfPath, IProgress<string>? progress = null)
     {
-        using var doc = PdfDocument.Open(pdfPath);
+        var debugFolder = Path.GetDirectoryName(pdfPath) ?? Environment.CurrentDirectory;
+        var linesDebug = new StringBuilder();
+        var headerDebug = new StringBuilder();
+        var columnDebug = new StringBuilder();
+        var rowsDebug = new StringBuilder();
 
-        progress?.Report("Lendo páginas do PDF...");
-        var words = new List<PdfWordModel>();
-        for (var pageIndex = 1; pageIndex <= doc.NumberOfPages; pageIndex++)
+        try
         {
-            var page = doc.GetPage(pageIndex);
-            foreach (var w in page.GetWords())
+            using var doc = PdfDocument.Open(pdfPath);
+            progress?.Report("Lendo páginas do PDF...");
+
+            var words = new List<PdfWordModel>();
+            for (var pageIndex = 1; pageIndex <= doc.NumberOfPages; pageIndex++)
             {
-                words.Add(new PdfWordModel(w.Text, w.BoundingBox.Left, w.BoundingBox.Bottom, w.BoundingBox.Width, pageIndex));
+                var page = doc.GetPage(pageIndex);
+                foreach (var w in page.GetWords())
+                {
+                    words.Add(new PdfWordModel(w.Text, w.BoundingBox.Left, w.BoundingBox.Bottom, w.BoundingBox.Width, pageIndex));
+                }
             }
+
+            var lines = PdfLineGroupingHelper.GroupWordsIntoLines(words);
+            LogLines(lines, linesDebug);
+
+            var headerCandidates = FindHeaderCandidates(lines, headerDebug);
+            var firstHeader = headerCandidates.FirstOrDefault()
+                ?? throw new InvalidOperationException("Cabeçalho da tabela não encontrado. Verifique debug-header-detection.txt.");
+
+            var columns = columnDetector.DetectColumns(firstHeader.HeaderLines, msg => columnDebug.AppendLine(msg)).ToList();
+            var essentialDetected = EssentialColumns.Count(c => columns.Any(col => col.CanonicalName.Equals(c, StringComparison.OrdinalIgnoreCase)));
+            if (essentialDetected < EssentialColumns.Length)
+            {
+                throw new InvalidOperationException("Colunas essenciais detectadas parcialmente. Verifique debug-column-map.txt.");
+            }
+
+            progress?.Report($"Tabela encontrada. {columns.Count} colunas detectadas. Extraindo itens...");
+
+            var rows = ExtractRows(lines, columns, headerCandidates, rowsDebug);
+            if (rows.Count == 0)
+            {
+                throw new InvalidOperationException("Tabela encontrada, mas nenhum item foi reconhecido.");
+            }
+
+            return new ParsedTableModel
+            {
+                Columns = columns,
+                Rows = rows
+            };
         }
-
-        var lines = PdfLineGroupingHelper.GroupWordsIntoLines(words);
-
-        var firstHeaderLine = lines.FirstOrDefault(IsHeaderLine)
-            ?? throw new InvalidOperationException("Nenhuma tabela compatível foi encontrada no PDF.");
-
-        var columns = columnDetector.DetectColumns(firstHeaderLine).ToList();
-        if (columns.Count == 0)
+        finally
         {
-            throw new InvalidOperationException("Não foi possível identificar colunas no cabeçalho.");
+            File.WriteAllText(Path.Combine(debugFolder, "debug-lines.txt"), linesDebug.ToString());
+            File.WriteAllText(Path.Combine(debugFolder, "debug-header-detection.txt"), headerDebug.ToString());
+            File.WriteAllText(Path.Combine(debugFolder, "debug-column-map.txt"), columnDebug.ToString());
+            File.WriteAllText(Path.Combine(debugFolder, "debug-rows.txt"), rowsDebug.ToString());
         }
+    }
 
-        progress?.Report($"{columns.Count} colunas detectadas. Extraindo linhas...");
+    private List<PdfRowModel> ExtractRows(
+        IReadOnlyList<RawPdfLine> lines,
+        IReadOnlyList<ColumnDefinition> columns,
+        IReadOnlyList<HeaderMatch> headerCandidates,
+        StringBuilder rowsDebug)
+    {
+        var firstHeader = headerCandidates.First();
+        var headerSet = BuildHeaderSkipSet(headerCandidates);
+        var descriptionColumn = columns.First(c => normalizer.IsDescriptionColumn(c.CanonicalName));
 
-        var extractedRows = new List<PdfRowModel>();
+        var rows = new List<PdfRowModel>();
         PdfRowModel? current = null;
 
-        foreach (var line in lines)
+        for (var i = 0; i < lines.Count; i++)
         {
-            if (line.PageNumber < firstHeaderLine.PageNumber)
+            var line = lines[i];
+            if (line.PageNumber < firstHeader.PageNumber)
             {
                 continue;
             }
 
-            if (IsHeaderLine(line))
+            if (line.PageNumber == firstHeader.PageNumber && line.Y > firstHeader.MinY)
             {
                 continue;
             }
 
-            var upper = NormalizeForSearch(line.Text);
-            if (StopTokens.Any(token => upper.Contains(token, StringComparison.OrdinalIgnoreCase)))
+            if (headerSet.Contains((line.PageNumber, NormalizeY(line.Y))))
             {
+                rowsDebug.AppendLine($"SKIP-HEADER P{line.PageNumber} Y{line.Y:F2}: {line.Text}");
                 continue;
             }
 
-            if (IsPageCounter(line.Text))
+            if (ShouldIgnoreLine(line.Text))
             {
+                rowsDebug.AppendLine($"SKIP-NOISE P{line.PageNumber} Y{line.Y:F2}: {line.Text}");
                 continue;
             }
 
             var row = MapLineToRow(line, columns);
-            var codeValue = row.GetValue("CODIGO") ?? string.Empty;
-            var hasCode = Regex.IsMatch(codeValue, "^[0-9A-Za-z.-]+$");
+            var code = row.GetValue("CODIGO") ?? string.Empty;
+            var description = row.GetValue(descriptionColumn.CanonicalName) ?? string.Empty;
 
-            var descriptionCanonical = columns.FirstOrDefault(c => normalizer.IsDescriptionColumn(c.CanonicalName))?.CanonicalName;
-            var description = descriptionCanonical is null ? string.Empty : (row.GetValue(descriptionCanonical) ?? string.Empty);
-
-            if (hasCode)
+            if (LooksLikeCode(code))
             {
+                rows.Add(row);
                 current = row;
-                extractedRows.Add(row);
+                rowsDebug.AppendLine($"NEW-ITEM P{line.PageNumber} Y{line.Y:F2} | CODIGO={code} | DESC={description}");
+                continue;
             }
-            else if (current is not null && !string.IsNullOrWhiteSpace(description))
+
+            if (current is not null && !string.IsNullOrWhiteSpace(description))
             {
-                MergeContinuationRow(current, row, columns);
+                var old = current.GetValue(descriptionColumn.CanonicalName) ?? string.Empty;
+                current.SetValue(descriptionColumn.CanonicalName, $"{old} {description}".Trim());
+                rowsDebug.AppendLine($"CONT-DESC P{line.PageNumber} Y{line.Y:F2} | +{description}");
+                continue;
             }
-            else
-            {
-                // Fallback textual: quando posições falham, tenta identificar pelo texto total e continuar descrição.
-                if (current is not null && line.Text.Length > 8 && !LooksLikeNoise(line.Text))
-                {
-                    AppendTextFallback(current, line.Text, columns);
-                }
-            }
+
+            rowsDebug.AppendLine($"SKIP-ROW P{line.PageNumber} Y{line.Y:F2} | {line.Text}");
         }
 
-        return new ParsedTableModel
-        {
-            Columns = columns,
-            Rows = extractedRows
-        };
+        return rows;
     }
 
     private static PdfRowModel MapLineToRow(RawPdfLine line, IReadOnlyList<ColumnDefinition> columns)
@@ -106,75 +149,151 @@ public class PdfPigTableParser(IColumnDetectorService columnDetector, IHeaderNor
             row.SetValue(column.CanonicalName, string.Empty);
         }
 
-        foreach (var word in line.Words)
+        foreach (var word in line.Words.OrderBy(w => w.X))
         {
-            var column = columns
-                .FirstOrDefault(c => word.X >= c.XStart - 2 && word.X <= c.XEnd + 2)
+            var column = columns.FirstOrDefault(c => word.X >= c.XStart && word.X <= c.XEnd)
                 ?? columns.OrderBy(c => Math.Abs(c.XStart - word.X)).First();
 
-            var existing = row.GetValue(column.CanonicalName);
-            var combined = string.IsNullOrWhiteSpace(existing)
-                ? word.Text
-                : $"{existing} {word.Text}";
-
-            row.SetValue(column.CanonicalName, combined.Trim());
+            var current = row.GetValue(column.CanonicalName);
+            row.SetValue(column.CanonicalName,
+                string.IsNullOrWhiteSpace(current) ? word.Text.Trim() : $"{current} {word.Text.Trim()}".Trim());
         }
 
         return row;
     }
 
-    private void MergeContinuationRow(PdfRowModel current, PdfRowModel continuation, IReadOnlyList<ColumnDefinition> columns)
+    private static bool LooksLikeCode(string code)
     {
-        foreach (var col in columns)
+        var normalized = code.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
         {
-            var newValue = continuation.GetValue(col.CanonicalName);
-            if (string.IsNullOrWhiteSpace(newValue))
+            return false;
+        }
+
+        return Regex.IsMatch(normalized, "^[0-9]{1,6}([.-][0-9A-Z]+)?$", RegexOptions.CultureInvariant)
+               || Regex.IsMatch(normalized, "^[0-9A-Z]{2,}$", RegexOptions.CultureInvariant);
+    }
+
+    private bool ShouldIgnoreLine(string lineText)
+    {
+        var normalized = normalizer.NormalizeText(lineText);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return true;
+        }
+
+        if (StopTokens.Any(token => normalized.Contains(token, StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        if (Regex.IsMatch(normalized, "^\\d+\\s+\\d+$", RegexOptions.CultureInvariant)
+            || Regex.IsMatch(normalized, "^\\d+\\s*/\\s*\\d+$", RegexOptions.CultureInvariant)
+            || Regex.IsMatch(normalized, "^\\d{2}/\\d{2}/\\d{4}", RegexOptions.CultureInvariant))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private List<HeaderMatch> FindHeaderCandidates(IReadOnlyList<RawPdfLine> lines, StringBuilder headerDebug)
+    {
+        var candidates = new List<HeaderMatch>();
+
+        var byPage = lines
+            .GroupBy(l => l.PageNumber)
+            .OrderBy(g => g.Key);
+
+        foreach (var pageGroup in byPage)
+        {
+            var pageLines = pageGroup.OrderByDescending(l => l.Y).ToList();
+            for (var i = 0; i < pageLines.Count; i++)
             {
-                continue;
+                var window = pageLines.Skip(i).Take(3).ToList();
+                if (window.Count == 0)
+                {
+                    continue;
+                }
+
+                var normalized = normalizer.NormalizeText(string.Join(" ", window.Select(l => l.Text)));
+                var matchCount = ScoreHeader(normalized, out var tokens);
+                headerDebug.AppendLine($"P{pageGroup.Key} idx={i} score={matchCount} tokens=[{string.Join(",", tokens)}] text='{normalized}'");
+
+                if (matchCount >= 6)
+                {
+                    candidates.Add(new HeaderMatch(pageGroup.Key, window, window.Min(l => l.Y), window.Max(l => l.Y)));
+                }
+            }
+        }
+
+        headerDebug.AppendLine($"Total de candidatos de cabeçalho: {candidates.Count}");
+        return candidates
+            .OrderBy(c => c.PageNumber)
+            .ThenByDescending(c => c.MaxY)
+            .ToList();
+    }
+
+    private static int ScoreHeader(string normalizedText, out List<string> tokens)
+    {
+        tokens = [];
+        var expected = new Dictionary<string, string[]>
+        {
+            ["CODIGO"] = ["CODIGO"],
+            ["DESCRICAO"] = ["DESCRICAO"],
+            ["UNID"] = ["UNID", "UNIDADE"],
+            ["LICITADA"] = ["LICITADA"],
+            ["ADITIVADA"] = ["ADITIVADA"],
+            ["CONTRATADA"] = ["CONTRATADA"],
+            ["COMPRA"] = ["COMPRA"],
+            ["COMPRADA"] = ["COMPRADA"],
+            ["EXPIRADA"] = ["EXPIRADA"],
+            ["SALDO"] = ["SALDO"],
+            ["VALOR_ITEM"] = ["VALOR ITEM"],
+            ["VALOR_SALDO"] = ["VALOR SALDO"]
+        };
+
+        foreach (var item in expected)
+        {
+            if (item.Value.Any(v => normalizedText.Contains(v, StringComparison.Ordinal)))
+            {
+                tokens.Add(item.Key);
+            }
+        }
+
+        return tokens.Count;
+    }
+
+    private static HashSet<(int Page, int Y)> BuildHeaderSkipSet(IReadOnlyList<HeaderMatch> matches)
+    {
+        var set = new HashSet<(int Page, int Y)>();
+        foreach (var match in matches)
+        {
+            foreach (var line in match.HeaderLines)
+            {
+                set.Add((line.PageNumber, NormalizeY(line.Y)));
+            }
+        }
+
+        return set;
+    }
+
+    private static int NormalizeY(double y)
+        => (int)Math.Round(y * 10, MidpointRounding.AwayFromZero);
+
+    private static void LogLines(IEnumerable<RawPdfLine> lines, StringBuilder output)
+    {
+        foreach (var page in lines.GroupBy(l => l.PageNumber).OrderBy(g => g.Key))
+        {
+            output.AppendLine($"=== PAGINA {page.Key} ===");
+            foreach (var line in page.OrderByDescending(l => l.Y))
+            {
+                output.AppendLine($"Y={line.Y:F2} | {line.Text}");
             }
 
-            var oldValue = current.GetValue(col.CanonicalName);
-            if (string.IsNullOrWhiteSpace(oldValue))
-            {
-                current.SetValue(col.CanonicalName, newValue.Trim());
-                continue;
-            }
-
-            current.SetValue(col.CanonicalName, $"{oldValue} {newValue}".Trim());
+            output.AppendLine();
         }
     }
 
-    private void AppendTextFallback(PdfRowModel current, string rawText, IReadOnlyList<ColumnDefinition> columns)
-    {
-        var descriptionColumn = columns.FirstOrDefault(c => normalizer.IsDescriptionColumn(c.CanonicalName));
-        if (descriptionColumn is null)
-        {
-            return;
-        }
-
-        var old = current.GetValue(descriptionColumn.CanonicalName) ?? string.Empty;
-        current.SetValue(descriptionColumn.CanonicalName, $"{old} {rawText}".Trim());
-    }
-
-    private static bool IsHeaderLine(RawPdfLine line)
-    {
-        var text = NormalizeForSearch(line.Text);
-        return HeaderKeywords.Count(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase)) >= 3;
-    }
-
-    private static bool IsPageCounter(string text)
-        => Regex.IsMatch(text.Trim(), "^\\d+\\s*/\\s*\\d+$");
-
-    private static bool LooksLikeNoise(string text)
-    {
-        var normalized = NormalizeForSearch(text);
-        return StopTokens.Any(token => normalized.Contains(token, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string NormalizeForSearch(string text)
-        => text.ToUpperInvariant()
-            .Replace("Ç", "C")
-            .Replace("Ã", "A")
-            .Replace("Á", "A")
-            .Replace("É", "E");
+    private sealed record HeaderMatch(int PageNumber, IReadOnlyList<RawPdfLine> HeaderLines, double MinY, double MaxY);
 }

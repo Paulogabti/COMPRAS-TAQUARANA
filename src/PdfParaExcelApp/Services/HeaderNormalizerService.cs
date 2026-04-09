@@ -9,45 +9,66 @@ public class HeaderNormalizerService : IHeaderNormalizerService
     private static readonly Dictionary<string, string> Equivalences = new(StringComparer.OrdinalIgnoreCase)
     {
         ["CODIGO"] = "CODIGO",
-        ["DESCRICAO DO ITEM"] = "DESCRICAO_ITEM",
-        ["DESCRICAO ITEM"] = "DESCRICAO_ITEM",
+
         ["DESCRICAO"] = "DESCRICAO_ITEM",
+        ["DESCRICAO ITEM"] = "DESCRICAO_ITEM",
+        ["DESCRICAO DO ITEM"] = "DESCRICAO_ITEM",
+
         ["UNID"] = "UNIDADE",
         ["UNIDADE"] = "UNIDADE",
-        ["QTD SALDO"] = "QTD_SALDO",
-        ["QTD. SALDO"] = "QTD_SALDO",
-        ["QUANT SALDO"] = "QTD_SALDO",
-        ["QUANT. SALDO"] = "QTD_SALDO",
-        ["QTD COMPRADA"] = "QTD_COMPRADA",
+
         ["QTD LICITADA"] = "QTD_LICITADA",
+        ["QTD ADITIVADA"] = "QTD_ADITIVADA",
+        ["QTD CONTRATADA"] = "QTD_CONTRATADA",
+        ["QTD EM COMPRA"] = "QTD_EM_COMPRA",
+        ["QTD COMPRADA"] = "QTD_COMPRADA",
+        ["QTD EXPIRADA"] = "QTD_EXPIRADA",
+        ["QTD SALDO"] = "QTD_SALDO",
+
+        ["VALOR ITEM"] = "VALOR_ITEM",
         ["VALOR ITEM R$"] = "VALOR_ITEM",
+        ["VALOR SALDO"] = "VALOR_SALDO",
         ["VALOR SALDO R$"] = "VALOR_SALDO"
     };
 
     public string Normalize(string header)
     {
-        if (string.IsNullOrWhiteSpace(header))
+        var normalized = NormalizeText(header)
+            .Replace(".", string.Empty, StringComparison.Ordinal)
+            .Replace(":", string.Empty, StringComparison.Ordinal)
+            .Trim();
+
+        if (Equivalences.TryGetValue(normalized, out var canonical))
+        {
+            return canonical;
+        }
+
+        return normalized.Replace(" ", "_", StringComparison.Ordinal);
+    }
+
+    public string NormalizeText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
         {
             return string.Empty;
         }
 
-        var cleaned = RemoveAccents(header).ToUpperInvariant();
+        var cleaned = RemoveAccents(text).ToUpperInvariant();
+        cleaned = cleaned.Replace("º", string.Empty, StringComparison.Ordinal)
+            .Replace("°", string.Empty, StringComparison.Ordinal)
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Replace("/", " ", StringComparison.Ordinal)
+            .Replace("(", " ", StringComparison.Ordinal)
+            .Replace(")", " ", StringComparison.Ordinal)
+            .Replace(";", " ", StringComparison.Ordinal);
+
+        cleaned = Regex.Replace(cleaned, "[^A-Z0-9$. ]+", " ");
+        cleaned = cleaned.Replace("QTD.", "QTD", StringComparison.Ordinal)
+            .Replace("R$", "R$", StringComparison.Ordinal);
         cleaned = Regex.Replace(cleaned, "\\s+", " ").Trim();
-        cleaned = cleaned.Replace("º", string.Empty).Replace("°", string.Empty);
 
-        if (Equivalences.TryGetValue(cleaned, out var canonical))
-        {
-            return canonical;
-        }
-
-        cleaned = cleaned.Replace(".", string.Empty).Replace(":", string.Empty).Trim();
-
-        if (Equivalences.TryGetValue(cleaned, out canonical))
-        {
-            return canonical;
-        }
-
-        return cleaned.Replace(" ", "_");
+        return cleaned;
     }
 
     public string ToDisplayName(string canonicalName)
@@ -56,12 +77,16 @@ public class HeaderNormalizerService : IHeaderNormalizerService
             "CODIGO" => "CÓDIGO",
             "DESCRICAO_ITEM" => "DESCRIÇÃO DO ITEM",
             "UNIDADE" => "UNID",
-            "QTD_SALDO" => "QTD. SALDO",
-            "QTD_COMPRADA" => "QTD. COMPRADA",
             "QTD_LICITADA" => "QTD. LICITADA",
+            "QTD_ADITIVADA" => "QTD. ADITIVADA",
+            "QTD_CONTRATADA" => "QTD. CONTRATADA",
+            "QTD_EM_COMPRA" => "QTD. EM COMPRA",
+            "QTD_COMPRADA" => "QTD. COMPRADA",
+            "QTD_EXPIRADA" => "QTD. EXPIRADA",
+            "QTD_SALDO" => "QTD. SALDO",
             "VALOR_ITEM" => "VALOR ITEM (R$)",
             "VALOR_SALDO" => "VALOR SALDO (R$)",
-            _ => canonicalName.Replace("_", " ")
+            _ => canonicalName.Replace("_", " ", StringComparison.Ordinal)
         };
 
     public bool IsDescriptionColumn(string canonicalName)
