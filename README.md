@@ -155,3 +155,34 @@ Você pode executar isso em ambiente controlado de CI/CD ou terminal com `DATABA
 
 A extração automática é confiável quando o arquivo de entrada é `.xlsx`.
 Para PDF, a estrutura varia muito entre documentos; por isso, no desenho atual, a geração automática exige `.xlsx` como fonte.
+
+---
+
+## 5) Plano seguro para upgrade do Next.js (recomendado)
+
+Atualmente o projeto está em `next@14.2.25`.
+Para atualizar com baixo risco:
+
+1. **Criar branch de upgrade**
+   - Ex.: `chore/upgrade-next-patch`.
+2. **Atualizar primeiro para patch da mesma major/minor**
+   - Atualizar `next` e `eslint-config-next` para a versão corrigida mais recente da linha 14.2.x.
+3. **Sincronizar pacote de lint**
+   - Manter `eslint-config-next` na mesma versão do `next`.
+4. **Validar localmente**
+   - Rodar `npm run build` e `npm run lint`.
+5. **Validar autenticação e upload**
+   - Testar login/logout, criação de demanda, upload/download de anexos e relatório CSV.
+6. **Deploy em Preview na Vercel**
+   - Validar variáveis (`DATABASE_URL`, `JWT_SECRET`, `BLOB_*`) e revisar logs.
+7. **Promover para Production**
+   - Após validação completa do Preview.
+
+### Checklist rápido de regressão
+- [ ] Login e sessão funcionando
+- [ ] Rotas de API com `jsonwebtoken` sem erro de runtime
+- [ ] Upload e download de arquivos funcionando
+- [ ] Geração de `Modelo.xlsx` funcionando
+- [ ] Relatório CSV disponível para ADMIN
+
+> Observação: os warnings de Edge Runtime no build sugerem revisar se alguma rota está sendo executada em Edge enquanto usa libs Node-only (`jsonwebtoken`). Se necessário, fixar runtime Node.js nessas rotas antes de avançar para major upgrade.
