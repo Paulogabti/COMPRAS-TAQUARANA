@@ -20,7 +20,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (!stored || !filename) return new NextResponse('not found', { status: 404 });
 
   const buffer = await readFileFromStorage(stored);
-  return new NextResponse(buffer, {
+  const body = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+
+  return new NextResponse(body, {
     headers: {
       'Content-Type': 'application/octet-stream',
       'Content-Disposition': `attachment; filename="${filename}"`
