@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum RequestType {
+  ADITIVO_PRAZO
+  CONTRATACAO_ARP
+  DISPENSA
+  LICITACAO
+  ADITIVO_ACRESCIMO
+}
+
+enum RequestStatus {
+  ABERTO
+  EM_COTACAO
+  FINALIZADO
+  CANCELADO
+}
+
+model User {
+  id           String          @id @default(cuid())
+  name         String
+  email        String          @unique
+  passwordHash String
+  role         Role            @default(USER)
+  createdAt    DateTime        @default(now())
+  requests     Request[]
+  statusEvents RequestEvent[]
+}
+
+model Request {
+  id             String          @id @default(cuid())
+  objeto         String
+  tipo           RequestType
+  dueDate        DateTime?
+  urgente        Boolean         @default(false)
+  status         RequestStatus   @default(ABERTO)
+  attachment     String
+  attachmentName String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  createdById    String
+  createdBy      User            @relation(fields: [createdById], references: [id])
+  quoteFile      String?
+  quoteFileName  String?
+  events         RequestEvent[]
+}
+
+model RequestEvent {
+  id         String        @id @default(cuid())
+  requestId   String
+  request     Request       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fromStatus  RequestStatus?
+  toStatus    RequestStatus
+  note        String?
+  actorId     String
+  actor       User          @relation(fields: [actorId], references: [id])
+  createdAt   DateTime      @default(now())
+
+  @@index([requestId, createdAt])
+}
