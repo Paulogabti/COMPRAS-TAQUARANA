@@ -18,7 +18,7 @@ export async function saveFile(file: File): Promise<StoredFile> {
 
   if (isBlobEnabled) {
     await put(key, buffer, {
-      access: 'private',
+      access: 'public',
       addRandomSuffix: false,
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
