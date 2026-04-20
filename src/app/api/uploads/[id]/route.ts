@@ -20,7 +20,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (!stored || !filename) return new NextResponse('not found', { status: 404 });
 
   const buffer = await readFileFromStorage(stored);
-  const body = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  const body = new Blob([buffer]);
 
   return new NextResponse(body, {
     headers: {
