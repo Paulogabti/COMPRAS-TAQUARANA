@@ -10,7 +10,8 @@ export type ModeloItem = {
 
 export async function extractItemsFromSourceXlsx(buffer: Buffer): Promise<ModeloItem[]> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
+  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+  await workbook.xlsx.load(arrayBuffer);
 
   const ws = workbook.worksheets[0];
   if (!ws) return [];
