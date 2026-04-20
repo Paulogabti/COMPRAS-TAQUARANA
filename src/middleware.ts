@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
+import { jwtVerify } from 'jose';
 
 const publicRoutes = ['/login'];
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname.startsWith('/api/auth/login')) return NextResponse.next();
   if (pathname.startsWith('/_next')) return NextResponse.next();
@@ -22,7 +22,9 @@ export function middleware(req: NextRequest) {
 
   if (token) {
     try {
-      jwt.verify(token, process.env.JWT_SECRET!);
+      const secret = process.env.JWT_SECRET;
+      if (!secret) throw new Error('JWT_SECRET não configurado');
+      await jwtVerify(token, new TextEncoder().encode(secret));
     } catch {
       const res = NextResponse.redirect(new URL('/login', req.url));
       res.cookies.delete('compras_session');
