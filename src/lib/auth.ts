@@ -1,5 +1,5 @@
-import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
+import { SignJWT, jwtVerify } from 'jose';
 
 export type SessionPayload = {
   sub: string;
@@ -9,18 +9,20 @@ export type SessionPayload = {
 };
 
 const COOKIE_NAME = 'compras_session';
+const SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-para-build');
 
-export function signSession(payload: SessionPayload) {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error('JWT_SECRET não configurado');
-  return jwt.sign(payload, secret, { expiresIn: '7d' });
+export async function signSession(payload: SessionPayload) {
+  return await new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('7d')
+    .sign(SECRET);
 }
 
-export function verifySession(token: string): SessionPayload | null {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) return null;
+export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
-    return jwt.verify(token, secret) as SessionPayload;
+    const { payload } = await jwtVerify(token, SECRET);
+    return payload as unknown as SessionPayload;
   } catch {
     return null;
   }
@@ -29,7 +31,7 @@ export function verifySession(token: string): SessionPayload | null {
 export async function getSession() {
   const token = cookies().get(COOKIE_NAME)?.value;
   if (!token) return null;
-  return verifySession(token);
+  return await verifySession(token);
 }
 
 export function setSessionCookie(token: string) {

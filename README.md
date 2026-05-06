@@ -1,188 +1,76 @@
-# Sistema de Gestão de Cotações - Compras Taquarana
+# 🏛️ Compras Taquarana - Sistema de Gestão de Cotações
 
-Aplicação para fluxo de demandas da equipe de Compras com gestão completa de cotações pelo ADMIN.
-
-## O que já está pronto para produção
-
-- Login com perfis `ADMIN` e `USER`.
-- Usuário comum abre demanda com:
-  - Objeto
-  - Tipo de cotação
-  - Data de vencimento opcional
-  - Urgente opcional
-  - Anexo `.pdf` ou `.xlsx`
-- Status inicial: `ABERTO`.
-- ADMIN pode alterar status para: `EM_COTACAO`, `FINALIZADO`, `CANCELADO`.
-- Histórico de status (trilha de auditoria com data/hora, ator e observação).
-- Upload de arquivo de retorno da cotação pelo ADMIN (`.zip/.pdf/.xlsx`).
-- Download seguro de anexos originais e arquivo de retorno.
-- Geração automática do `Modelo.xlsx` quando a origem for `.xlsx`.
-- Regra de negócio aplicada: **Nome limitado a 250 caracteres** na planilha modelo.
-- Relatório de demandas em CSV para ADMIN.
-- Pronto para Vercel com:
-  - Banco Postgres (`DATABASE_URL`)
-  - Storage persistente via Vercel Blob (`BLOB_READ_WRITE_TOKEN` + `BLOB_BASE_URL`)
-
-## Stack
-
-- Next.js 14 (App Router)
-- TypeScript
-- Prisma ORM
-- PostgreSQL
-- Vercel Blob (produção)
-- ExcelJS (leitura/geração de `.xlsx`)
+Este é um sistema profissional desenvolvido para gerenciar o fluxo de demandas de compras da Prefeitura de Taquarana. Ele permite que usuários enviem solicitações e que administradores gerenciem as cotações, gerem planilhas automáticas e anexem retornos.
 
 ---
 
-## 1) Configuração local (desenvolvimento)
+## ✨ Funcionalidades Premium
 
-### Pré-requisitos
-- Node.js 20+
-- NPM
-- PostgreSQL disponível (local ou remoto)
-
-### Passo a passo
-1. Copie variáveis:
-   ```bash
-   cp .env.example .env
-   ```
-2. Ajuste `.env` com seu Postgres e segredo JWT.
-3. Instale dependências:
-   ```bash
-   npm install
-   ```
-4. Gere migration inicial e Prisma Client:
-   ```bash
-   npx prisma migrate dev --name init
-   ```
-5. Crie o ADMIN:
-   ```bash
-   npm run seed
-   ```
-6. Rode a aplicação:
-   ```bash
-   npm run dev
-   ```
+- **Interface Moderna:** Design limpo, intuitivo e responsivo.
+- **Gestão de Demandas:** Fluxo completo de ABERTO → EM COTAÇÃO → FINALIZADO.
+- **Automação de Planilhas:** Gera automaticamente o `Modelo.xlsx` a partir de arquivos enviados.
+- **Segurança Avançada:** Autenticação protegida com JWT e criptografia de senhas.
+- **Relatórios:** Exportação de dados em CSV para análise administrativa.
 
 ---
 
-## 2) Deploy completo na Vercel (produção)
+## 🚀 Guia de Instalação (Para Leigos)
 
-## 2.1 Subir código no GitHub
-1. Garanta que este projeto está no seu repositório do GitHub.
-2. Faça push da branch principal.
+Este guia foi feito para que qualquer pessoa consiga colocar o sistema no ar usando a **Vercel**, que é gratuita e muito fácil de configurar.
 
-## 2.2 Criar projeto na Vercel
-1. Acesse Vercel > **Add New Project**.
-2. Selecione o repositório do GitHub.
-3. Framework detectado: **Next.js**.
+### 1. Preparação
+Você vai precisar de:
+- Uma conta no [GitHub](https://github.com).
+- Uma conta na [Vercel](https://vercel.com) (conectada ao seu GitHub).
 
-## 2.3 Banco de dados (Vercel Postgres)
-1. No painel da Vercel, abra **Storage**.
-2. Clique em **Create Database** > **Postgres**.
-3. Após criar, conecte ao projeto.
-4. A Vercel preencherá automaticamente `POSTGRES_PRISMA_URL` e outras variáveis.
-5. Defina `DATABASE_URL` usando a URL Prisma (normalmente `POSTGRES_PRISMA_URL`).
+### 2. Subindo para o GitHub
+Se você já tem este código no seu GitHub, pule para o próximo passo. Caso contrário:
+1. Crie um novo repositório no seu GitHub.
+2. Envie os arquivos deste projeto para lá.
 
-## 2.4 Armazenamento de arquivos (Vercel Blob)
-1. No painel da Vercel, abra **Storage**.
-2. Clique em **Create** > **Blob**.
-3. Conecte ao projeto.
-4. Copie e configure no projeto:
-   - `BLOB_READ_WRITE_TOKEN`
-   - `BLOB_BASE_URL` (base pública do bucket)
+### 3. Deploy na Vercel (Passo a Passo)
+1. No painel da Vercel, clique em **"Add New"** > **"Project"**.
+2. Selecione o repositório `COMPRAS-TAQUARANA` e clique em **"Import"**.
+3. Em **"Environment Variables"** (Variáveis de Ambiente), você precisará adicionar as seguintes chaves (copie e cole os nomes exatamente como estão):
 
-## 2.5 Variáveis de ambiente obrigatórias
-No projeto Vercel > **Settings** > **Environment Variables**, configure:
+| Nome da Variável | O que colocar? | Exemplo |
+| :--- | :--- | :--- |
+| `JWT_SECRET` | Uma frase longa e aleatória | `minha-frase-secreta-muito-segura-123` |
+| `ADMIN_EMAIL` | O e-mail que você usará para entrar | `admin@taquarana.al.gov.br` |
+| `ADMIN_PASSWORD` | A senha inicial do administrador | `admin123` |
 
-- `DATABASE_URL`
-- `JWT_SECRET` (use um valor forte, 32+ caracteres)
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
-- `BLOB_READ_WRITE_TOKEN`
-- `BLOB_BASE_URL`
+4. **Banco de Dados:**
+   - Após clicar em "Deploy", vá na aba **"Storage"** no painel do projeto na Vercel.
+   - Escolha **"Postgres"** e clique em **"Create"**.
+   - Depois de criado, clique em **"Connect"** para ligar o banco ao seu projeto. Isso criará a variável `DATABASE_URL` automaticamente.
 
-> Recomendo criar valores para `Production`, `Preview` e `Development`.
+5. **Armazenamento de Arquivos:**
+   - Na mesma aba **"Storage"**, escolha **"Blob"** e clique em **"Create"**.
+   - Clique em **"Connect"**. Isso permitirá que o sistema salve os PDFs e Planilhas que você enviar.
 
-## 2.6 Build command e deploy
-- Build command padrão do projeto já está preparado:
-  - `npm run build`
-- Ele executa `prisma generate` + `next build`.
+### 4. Finalização
+1. Vá na aba **"Deployments"**, clique nos três pontinhos do seu deploy e selecione **"Redeploy"** para garantir que ele pegue todas as variáveis novas.
+2. Assim que terminar, clique no link gerado pela Vercel e o sistema estará online!
+3. Acesse com o e-mail e senha que você configurou no passo 3.
 
-## 2.7 Rodar migrations em produção
-Após o primeiro deploy, execute migration no banco de produção:
+---
 
-Opção A (recomendada): pipeline CI/CD rodando
+## 🛠️ Tecnologias Utilizadas
+- **Next.js 14:** Framework web moderno.
+- **Prisma & PostgreSQL:** Banco de dados robusto e confiável.
+- **Vercel Blob:** Armazenamento seguro de arquivos na nuvem.
+- **ExcelJS:** Manipulação inteligente de planilhas.
+
+---
+
+## 📝 Notas de Manutenção
+Para atualizar o banco de dados localmente ou em produção, utilize o comando:
 ```bash
-npx prisma migrate deploy
+npx prisma db push
 ```
-
-Opção B: localmente, apontando para o mesmo `DATABASE_URL` de produção.
-
-## 2.8 Criar usuário ADMIN no ambiente de produção
-Com variáveis `ADMIN_EMAIL` e `ADMIN_PASSWORD` já definidas, rode:
+Para criar o usuário administrador inicial:
 ```bash
 npm run seed
 ```
 
-Você pode executar isso em ambiente controlado de CI/CD ou terminal com `DATABASE_URL` de produção.
-
----
-
-## 3) Fluxo funcional em produção
-
-1. Equipe (USER) abre demanda e envia PDF/XLSX.
-2. Demanda entra como `ABERTO`.
-3. ADMIN muda status para `EM_COTACAO` e pode registrar observação.
-4. ADMIN baixa anexo e gera `Modelo.xlsx` (quando origem for XLSX).
-5. ADMIN anexa retorno final (zip/pdf/xlsx); status passa para `FINALIZADO`.
-6. USER baixa o arquivo final.
-7. ADMIN baixa relatório CSV consolidado.
-
----
-
-## 4) Boas práticas para estabilizar ainda mais
-
-- Habilitar monitoramento (Vercel Observability / Sentry).
-- Criar rotina de backup do banco Postgres.
-- Adicionar renovação/expiração de sessão com refresh controlado.
-- Implantar fila para processamento de arquivos muito grandes.
-- Evoluir parser de PDF (OCR) se quiser geração automática também para PDF.
-
----
-
-## Observação técnica sobre geração de `Modelo.xlsx`
-
-A extração automática é confiável quando o arquivo de entrada é `.xlsx`.
-Para PDF, a estrutura varia muito entre documentos; por isso, no desenho atual, a geração automática exige `.xlsx` como fonte.
-
----
-
-## 5) Plano seguro para upgrade do Next.js (recomendado)
-
-Atualmente o projeto está em `next@14.2.25`.
-Para atualizar com baixo risco:
-
-1. **Criar branch de upgrade**
-   - Ex.: `chore/upgrade-next-patch`.
-2. **Atualizar primeiro para patch da mesma major/minor**
-   - Atualizar `next` e `eslint-config-next` para a versão corrigida mais recente da linha 14.2.x.
-3. **Sincronizar pacote de lint**
-   - Manter `eslint-config-next` na mesma versão do `next`.
-4. **Validar localmente**
-   - Rodar `npm run build` e `npm run lint`.
-5. **Validar autenticação e upload**
-   - Testar login/logout, criação de demanda, upload/download de anexos e relatório CSV.
-6. **Deploy em Preview na Vercel**
-   - Validar variáveis (`DATABASE_URL`, `JWT_SECRET`, `BLOB_*`) e revisar logs.
-7. **Promover para Production**
-   - Após validação completa do Preview.
-
-### Checklist rápido de regressão
-- [ ] Login e sessão funcionando
-- [ ] Rotas de API com `jsonwebtoken` sem erro de runtime
-- [ ] Upload e download de arquivos funcionando
-- [ ] Geração de `Modelo.xlsx` funcionando
-- [ ] Relatório CSV disponível para ADMIN
-
-> Observação: os warnings de Edge Runtime no build sugerem revisar se alguma rota está sendo executada em Edge enquanto usa libs Node-only (`jsonwebtoken`). Se necessário, fixar runtime Node.js nessas rotas antes de avançar para major upgrade.
+Desenvolvido com foco em eficiência e transparência para a gestão pública.
