@@ -10,17 +10,17 @@ export async function POST(req: Request) {
     const password = String(form.get('password') ?? '');
 
     if (!email || !password) {
-      return NextResponse.redirect(new URL('/login?error=missing', req.url));
+      return NextResponse.redirect(new URL('/login?error=missing', req.url), { status: 303 });
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      return NextResponse.redirect(new URL('/login?error=invalid', req.url));
+      return NextResponse.redirect(new URL('/login?error=invalid', req.url), { status: 303 });
     }
 
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) {
-      return NextResponse.redirect(new URL('/login?error=invalid', req.url));
+      return NextResponse.redirect(new URL('/login?error=invalid', req.url), { status: 303 });
     }
 
     const token = await signSession({ 
@@ -32,9 +32,9 @@ export async function POST(req: Request) {
     
     setSessionCookie(token);
 
-    return NextResponse.redirect(new URL('/', req.url));
+    return NextResponse.redirect(new URL('/', req.url), { status: 303 });
   } catch (error) {
     console.error('Login error:', error);
-    return NextResponse.redirect(new URL('/login?error=server', req.url));
+    return NextResponse.redirect(new URL('/login?error=server', req.url), { status: 303 });
   }
 }

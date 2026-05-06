@@ -13,7 +13,7 @@ const schema = z.object({
 
 export async function POST(req: Request) {
   const session = await getSession();
-  if (!session) return NextResponse.redirect(new URL('/login', req.url));
+  if (!session) return NextResponse.redirect(new URL('/login', req.url), { status: 303 });
 
   const form = await req.formData();
   const parsed = schema.safeParse({
@@ -25,12 +25,12 @@ export async function POST(req: Request) {
 
   const attachment = form.get('attachment');
   if (!parsed.success || !(attachment instanceof File)) {
-    return NextResponse.redirect(new URL('/', req.url));
+    return NextResponse.redirect(new URL('/', req.url), { status: 303 });
   }
 
   const ext = attachment.name.toLowerCase();
   if (!ext.endsWith('.pdf') && !ext.endsWith('.xlsx')) {
-    return NextResponse.redirect(new URL('/', req.url));
+    return NextResponse.redirect(new URL('/', req.url), { status: 303 });
   }
 
   const saved = await saveFile(attachment);
@@ -57,5 +57,5 @@ export async function POST(req: Request) {
     }
   });
 
-  return NextResponse.redirect(new URL('/', req.url));
+  return NextResponse.redirect(new URL('/', req.url), { status: 303 });
 }

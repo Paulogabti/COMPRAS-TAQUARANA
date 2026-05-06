@@ -17,12 +17,12 @@ export async function saveFile(file: File): Promise<StoredFile> {
   const buffer = Buffer.from(await file.arrayBuffer());
 
   if (isBlobEnabled) {
-    await put(key, buffer, {
+    const blob = await put(key, buffer, {
       access: 'public',
       addRandomSuffix: false,
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
-    return { storageKey: key, originalName: file.name };
+    return { storageKey: blob.url, originalName: file.name };
   }
 
   await mkdir(uploadDir, { recursive: true });
@@ -32,18 +32,17 @@ export async function saveFile(file: File): Promise<StoredFile> {
 
 export async function readFileFromStorage(storageKey: string): Promise<Buffer> {
   if (isBlobEnabled) {
-    const endpoint = process.env.BLOB_BASE_URL;
-    if (!endpoint) {
-      throw new Error('BLOB_BASE_URL não configurada para leitura em produção.');
+    // Se a storageKey já for uma URL completa (como as novas que vamos salvar)
+    const url = storageKey.startsWith('http') ? storageKey : `${(process.env.BLOB_BASE_URL || '').replace(/\/$/, '')}/${storageKey}`;
+    
+    if (!url.startsWith('http')) {
+      throw new Error('URL do Blob inválida ou BLOB_BASE_URL não configurada.');
     }
-    const url = `${endpoint.replace(/\/$/, '')}/${storageKey}`;
+
     const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`
-      },
       cache: 'no-store'
     });
-    if (!response.ok) throw new Error('Arquivo não encontrado no Blob.');
+    if (!response.ok) throw new Error(`Arquivo não encontrado no Blob: ${response.statusText}`);
     return Buffer.from(await response.arrayBuffer());
   }
 
